@@ -1,8 +1,21 @@
 import sys
 import json
+import os
 from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QCheckBox, QLineEdit, QPushButton
 from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QFont, QIcon
+
+def get_data_dir():
+    """Get the appropriate directory for storing application data"""
+    if os.name == 'nt':
+        data_dir = os.path.join(os.environ['APPDATA'], 'DailyDriver')
+    else:
+        data_dir = os.path.join(os.path.expanduser('~'), '.dailydriver')
+    
+    if not os.path.exists(data_dir):
+        os.makedirs(data_dir)
+        
+    return data_dir
 
 class ToDoApp(QWidget):
     def __init__(self):
@@ -10,9 +23,20 @@ class ToDoApp(QWidget):
         self.setWindowTitle("Daily Driver")
         self.setFixedSize(700, 800)
         self.setStyleSheet("background-color: #222;")
-        self.setWindowIcon(QIcon("resources/icon.ico"))
+        self.setWindowIcon(QIcon(self.get_resource_path("resources/icon.ico")))
+        self.data_dir = get_data_dir()
+        self.tasks_file = os.path.join(self.data_dir, 'tasks.json')
         self.init_ui()
 
+    def get_resource_path(self, relative_path):
+        """Get absolute path to resource, works for dev and for PyInstaller"""
+        try:
+            base_path = sys._MEIPASS
+        except Exception:
+            base_path = os.path.abspath(".")
+            
+        return os.path.join(base_path, relative_path)
+    
     def init_ui(self):
         app_font = QFont("White Rabbit", 11)
         QApplication.setFont(app_font)
@@ -162,21 +186,25 @@ class ToDoApp(QWidget):
                 for checkbox, input_field in self.might_do_tasks
             ],
         }
-        with open("tasks.json", "w") as file:
-            json.dump(tasks, file)
+        try:
+            with open(self.tasks_file, "w") as file:
+                json.dump(tasks, file)
+        except Exception as e:
+            print(f"Error saving tasks: {e}")
 
     def load_tasks(self):
         try:
-            with open("tasks.json", "r") as file:
-                tasks = json.load(file)
-                self.mit_input.setText(tasks["most_important_task"]["text"])
-                self.mit_checkbox.setChecked(tasks["most_important_task"]["checked"])
+            if os.path.exists(self.tasks_file):
+                with open(self.tasks_file, "r") as file:
+                    tasks = json.load(file)
+                    self.mit_input.setText(tasks["most_important_task"]["text"])
+                    self.mit_checkbox.setChecked(tasks["most_important_task"]["checked"])
 
-                for (checkbox, input_field), task in zip(self.might_do_tasks, tasks["might_do_tasks"]):
-                    input_field.setText(task["text"])
-                    checkbox.setChecked(task["checked"])
-        except (FileNotFoundError, KeyError):
-            pass
+                    for (checkbox, input_field), task in zip(self.might_do_tasks, tasks["might_do_tasks"]):
+                        input_field.setText(task["text"])
+                        checkbox.setChecked(task["checked"])
+        except Exception as e:
+            print(f"Error loading tasks: {e}")
 
     def clear_tasks(self):
         self.mit_checkbox.setChecked(False)
@@ -186,8 +214,11 @@ class ToDoApp(QWidget):
             checkbox.setChecked(False)
             input_field.clear()
 
-        with open("tasks.json", "w") as file:
-            file.write("{}")
+        try:
+            with open(self.tasks_file, "w") as file:
+                file.write("{}")
+        except Exception as e:
+            print(f"Error clearing tasks: {e}")
 
     def closeEvent(self, event):
         self.save_tasks()
